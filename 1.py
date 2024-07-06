@@ -1,17 +1,17 @@
 import os
-import re
 import requests
 from github import Github
 from github.InputFileContent import InputFileContent
 
 # 配置
-url = "http://example.com"  # 要获取内容的URL
-github_token = "your_actual_token_here"  # 你的GitHub访问令牌
-gist_description = "Clash node content"  # Gist描述
-gist_filename = "clash_nodes.txt"  # Gist文件名
-gist_id_file = "/root/gist_id.txt"  # 用于存储Gist ID的文件路径
+url = "XXXXXX"  # 要获取内容的URL
+github_token = "XXXXXX"  # 你的GitHub访问令牌
+gist_description = "123 "  # Gist描述
+gist_filename = "XXXXX"  # Gist文件名
+gist_id_file = "/home/gist_id.txt"  # 用于存储Gist ID的文件路径
+local_backup_file = "/home/backup_file.txt"  # 本地备份文件路径
 
-# 设置自定义头信息，包括 User-Agent
+# 设置自定义头信息
 headers = {
     "User-Agent": "clash verge"
 }
@@ -23,41 +23,26 @@ if response.status_code == 200:
 else:
     raise Exception(f"Failed to retrieve content from {url}, status code {response.status_code}")
 
-# 处理 "proxies:" 段落内容
-lines = content.splitlines()
-proxies_start = None
-proxies_end = None
-for i, line in enumerate(lines):
-    if line.strip() == "proxies:":
-        proxies_start = i
-    elif proxies_start is not None and line.strip() and not line.startswith(" "):
-        proxies_end = i
-        break
+# 去除重复的server节点
+unique_servers = set()
+filtered_lines = []
+for line in content.splitlines():
+    if "server:" in line:
+        server = line.strip().split("server:")[1].strip()
+        if server not in unique_servers:
+            unique_servers.add(server)
+            filtered_lines.append(line)
+    else:
+        filtered_lines.append(line)
 
-if proxies_start is not None:
-    if proxies_end is None:
-        proxies_end = len(lines)
+filtered_content = "\n".join(filtered_lines)
 
-    proxies = lines[proxies_start + 1:proxies_end]
-    seen_servers = set()
-    unique_proxies = []
-    for line in proxies:
-        match = re.search(r'server: ([^,]+)', line)
-        if match:
-            server_ip = match.group(1)
-            if server_ip not in seen_servers:
-                seen_servers.add(server_ip)
-                unique_proxies.append(line)
-        else:
-            unique_proxies.append(line)
-
-    filtered_content = lines[:proxies_start + 1] + unique_proxies + lines[proxies_end:]
-else:
-    filtered_content = lines
-
-filtered_content = "\n".join(filtered_content)
+# 将内容保存到本地备份文件
+with open(local_backup_file, 'w') as backup_file:
+    backup_file.write(filtered_content)
 
 # 使用PyGithub
+print("GitHub Token:", github_token)  # 调试输出，确保令牌正确传递
 g = Github(github_token)
 user = g.get_user()
 
@@ -77,22 +62,20 @@ if os.path.exists(gist_id_file):
         print(f"Failed to update Gist: {e}")
         print("Creating a new Gist instead...")
         new_gist = user.create_gist(
-            public=False,  # 设置为私密Gist
+            public=False,
             files={gist_filename: InputFileContent(filtered_content)},
             description=gist_description
         )
-        # 保存新的Gist ID
         with open(gist_id_file, 'w') as file:
             file.write(new_gist.id)
         print("New Gist created:", new_gist.html_url)
 else:
     print("Creating a new Gist...")
     new_gist = user.create_gist(
-        public=False,  # 设置为私密Gist
+        public=False,
         files={gist_filename: InputFileContent(filtered_content)},
         description=gist_description
     )
-    # 保存新的Gist ID
     with open(gist_id_file, 'w') as file:
         file.write(new_gist.id)
     print("Gist created:", new_gist.html_url)
